@@ -1,0 +1,29 @@
+name: ReelLess
+options:
+  bundleIdPrefix: ro.tiut
+  deploymentTarget:
+    iOS: "16.0"
+packages:
+  ReelLessCore:
+    path: Packages/ReelLessCore
+targets:
+  ReelLess:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: ReelLessCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: ReelLess
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSCameraUsageDescription: Send photos and videos in chats.
+        NSMicrophoneUsageDescription: Record voice notes and videos for chats.
+        NSPhotoLibraryUsageDescription: Attach photos and videos to messages.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ro.tiut.reelless
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"

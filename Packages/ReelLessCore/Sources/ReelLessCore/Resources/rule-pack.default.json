@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "allow": [
+    "^/direct(/|$)",
+    "^/accounts/(login|onetap|logout|emailsignup|password)(/|$)",
+    "^/challenge(/|$)",
+    "^/two_factor(/|$)"
+  ],
+  "quarantine": [
+    "^/(p|reel|tv)/[A-Za-z0-9_-]+/?$",
+    "^/reels/[A-Za-z0-9_-]+/?$",
+    "^/stories/[^/]+/[0-9]+/?$"
+  ],
+  "hideCSS": [
+    "a[href=\"/\"]",
+    "a[href^=\"/explore\"]",
+    "a[href^=\"/reels\"]",
+    "a[href^=\"/stories/\"]",
+    "a:has(svg[aria-label=\"Home\"])",
+    "a:has(svg[aria-label=\"Explore\"])",
+    "a:has(svg[aria-label=\"Reels\"])"
+  ],
+  "viewerCSS": [
+    "html, body { overflow: hidden !important; overscroll-behavior: none !important; }",
+    "section[aria-label*=\"omment\" i], form[method=\"POST\"] textarea { display: none !important; }"
+  ]
+}
