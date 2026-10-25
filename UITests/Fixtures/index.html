@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Instagram fixture</title>
+<!--
+  A stand-in for Instagram's web DM client, served for every path by server.py.
+  Each shared reel in the thread opens the way Instagram might open it, so the UI tests
+  can check that none of them lets you swipe on to another reel:
+    A  plain link to /reel/AAA/ (full navigation; the reel page is a swipeable, auto-advancing feed)
+    B  in-page overlay feed (native scroll-snap) after history.pushState('/reels/BBB/')
+    C  in-page overlay feed (native scroll-snap) with no URL change, auto-advancing
+    D  in-page overlay carousel moved by JS pointer/touch handlers (no native scrolling)
+-->
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font: 17px -apple-system, sans-serif; background: #fff; }
+  .page { height: 100%; display: flex; flex-direction: column; }
+  header { padding: 12px; border-bottom: 1px solid #ddd; font-weight: 600; }
+  .scroller { flex: 1; overflow-y: auto; }
+  .row { padding: 12px; border-bottom: 1px solid #eee; }
+  .share { display: block; margin: 8px 12px; padding: 14px; background: #eef; border-radius: 12px; color: #000; text-decoration: none; }
+  .feed { position: fixed; inset: 0; z-index: 10; background: #000; overflow-y: scroll; scroll-snap-type: y mandatory; }
+  .reel { height: 100vh; scroll-snap-align: start; position: relative; color: #fff; display: flex; align-items: center; justify-content: center; }
+  .reel video { position: absolute; inset: 0; width: 100%; height: 100%; background: #234; object-fit: cover; }
+  .reel span { position: relative; font-size: 34px; font-weight: 700; }
+  .reel:nth-child(even) video { background: #432; }
+  .close { position: fixed; top: 50px; right: 12px; z-index: 20; padding: 8px 12px; background: #fff; border-radius: 8px; }
+  .carousel { position: fixed; inset: 0; z-index: 10; overflow: hidden; background: #000; touch-action: none; }
+  .track { transition: transform .25s; }
+  nav { display: flex; justify-content: space-around; border-top: 1px solid #ddd; padding: 10px; }
+  nav a { color: #000; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+var app = document.getElementById('app');
+function reels(n) {
+  var h = '';
+  for (var i = 1; i <= n; i++) h += '<div class="reel"><video muted playsinline></video><span>REEL-' + i + '</span></div>';
+  return h;
+}
+function nav() {
+  return '<nav><a href="/">Home</a><a href="/explore/">Explore</a><a href="/reels/">Reels</a><a href="/direct/inbox/">Messages</a></nav>';
+}
+// Moves `feed` to the next reel after a while, like Instagram does when a reel ends.
+function autoAdvance(scroller) {
+  setTimeout(function () { scroller.scrollBy({ top: innerHeight, behavior: 'smooth' }); }, 2500);
+}
+function closeOverlay() { var o = document.getElementById('overlay'); if (o) o.remove(); }
+function overlayFeed(advance) {
+  closeOverlay();
+  var o = document.createElement('div');
+  o.id = 'overlay';
+  o.innerHTML = '<div class="feed" id="feed">' + reels(5) + '</div><div class="close" role="button" onclick="closeOverlay()">Close reel</div>';
+  document.body.appendChild(o);
+  if (advance) autoAdvance(document.getElementById('feed'));
+}
+function overlayCarousel() {
+  closeOverlay();
+  var o = document.createElement('div');
+  o.id = 'overlay';
+  o.innerHTML = '<div class="carousel" id="carousel"><div class="track" id="track">' + reels(5) + '</div></div><div class="close" role="button" onclick="closeOverlay()">Close reel</div>';
+  document.body.appendChild(o);
+  var c = document.getElementById('carousel'), t = document.getElementById('track'), index = 0, startY = null, dy = 0;
+  function down(y) { startY = y; dy = 0; t.style.transition = 'none'; }
+  function move(y) { if (startY === null) return; dy = y - startY; t.style.transform = 'translateY(' + (-index * innerHeight + dy) + 'px)'; }
+  function up() {
+    if (startY === null) return;
+    if (dy < -60 && index < 4) index++;
+    if (dy > 60 && index > 0) index--;
+    t.style.transition = ''; t.style.transform = 'translateY(' + (-index * innerHeight) + 'px)'; startY = null;
+  }
+  c.addEventListener('pointerdown', function (e) { down(e.clientY); });
+  c.addEventListener('pointermove', function (e) { move(e.clientY); });
+  c.addEventListener('pointerup', up);
+  c.addEventListener('pointercancel', up);
+  c.addEventListener('touchstart', function (e) { down(e.touches[0].clientY); }, { passive: true });
+  c.addEventListener('touchmove', function (e) { move(e.touches[0].clientY); }, { passive: true });
+  c.addEventListener('touchend', up);
+}
+function render() {
+  var p = location.pathname;
+  closeOverlay();
+  if (/^\/direct\/inbox\/?$/.test(p)) {
+    app.innerHTML = '<div class="page"><header>Inbox</header><div class="scroller">' +
+      '<a class="row" href="/direct/t/1/" style="display:block;color:#000">Thread with Ana</a></div>' + nav() + '</div>';
+  } else if (/^\/direct\/t\//.test(p)) {
+    var msgs = '';
+    for (var i = 1; i <= 40; i++) msgs += '<div class="row">MSG-' + i + '</div>';
+    app.innerHTML = '<div class="page"><header>Ana</header><div class="scroller" id="thread">' +
+      '<a class="share" href="/reel/AAA/?igsh=xyz">Shared reel A</a>' +
+      '<div class="share" role="button" id="shareB">Shared reel B</div>' +
+      '<div class="share" role="button" id="shareC">Shared reel C</div>' +
+      '<div class="share" role="button" id="shareD">Shared reel D</div>' +
+      msgs + '</div>' + nav() + '</div>';
+    document.getElementById('shareB').onclick = function () { history.pushState({}, '', '/reels/BBB/'); overlayFeed(false); };
+    document.getElementById('shareC').onclick = function () { overlayFeed(true); };
+    document.getElementById('shareD').onclick = function () { overlayCarousel(); };
+  } else if (/^\/reels?\/[A-Za-z0-9_-]+\/?$/.test(p)) {
+    // Instagram's reel page is itself a feed: the document scrolls on to more reels.
+    app.innerHTML = '<div style="scroll-snap-type:y mandatory">' + reels(5) + '</div>';
+    document.documentElement.style.scrollSnapType = 'y mandatory';
+    autoAdvance(document.scrollingElement);
+  } else {
+    app.innerHTML = '<div class="page"><header>FEED</header><div class="scroller">' + reels(5) + '</div>' + nav() + '</div>';
+  }
+}
+addEventListener('popstate', render);
+// SPA links, like Instagram's router.
+document.addEventListener('click', function (e) {
+  var a = e.target.closest && e.target.closest('a[href]');
+  if (!a || e.defaultPrevented) return;
+  var u = new URL(a.getAttribute('href'), location.href);
+  if (u.origin !== location.origin) return;
+  e.preventDefault();
+  if (/^\/(reel|reels|p)\//.test(u.pathname)) { location.href = u.href; return; }
+  history.pushState({}, '', u.pathname + u.search);
+  render();
+});
+render();
+</script>
+</body>
+</html>

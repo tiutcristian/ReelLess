@@ -20,7 +20,7 @@ struct WebContainer: UIViewRepresentable {
         web.navigationDelegate = context.coordinator
         web.uiDelegate = context.coordinator
         #if DEBUG
-        web.isInspectable = true
+        if #available(iOS 16.4, *) { web.isInspectable = true }
         #endif
 
         let refresh = UIRefreshControl()
@@ -33,7 +33,7 @@ struct WebContainer: UIViewRepresentable {
         web.addGestureRecognizer(settingsTap)
 
         context.coordinator.attach(web)
-        web.load(URLRequest(url: RoutePolicy.inboxURL))
+        web.load(URLRequest(url: self.model.policy.inboxURL))
         return web
     }
 
@@ -48,7 +48,7 @@ struct WebContainer: UIViewRepresentable {
 
         func attach(_ web: WKWebView) {
             self.web = web
-            model.reloadInbox = { [weak web] in web?.load(URLRequest(url: RoutePolicy.inboxURL)) }
+            model.reloadInbox = { [weak web] in web?.load(URLRequest(url: self.model.policy.inboxURL)) }
             // Backstop for route changes that bypass both the JS guard and the navigation delegate.
             urlObservation = web.observe(\.url) { [weak self] web, _ in
                 guard let self, let url = web.url else { return }
@@ -63,7 +63,10 @@ struct WebContainer: UIViewRepresentable {
 
         @objc func threeFingerTap() { model.showSettings = true }
 
-        private func handle(_ url: URL) {
+        /// `fromHistory` is true when the page changed its own route (pushState). It may already be
+        /// rendering that route, e.g. a swipeable reel player over the chat, so it is reloaded at
+        /// its current, still allowed URL to tear that down.
+        private func handle(_ url: URL, fromHistory: Bool = false) {
             let decision = model.policy.decide(url)
             model.record(decision, for: url)
             switch decision {
@@ -71,8 +74,9 @@ struct WebContainer: UIViewRepresentable {
                 break
             case .quarantine(let item):
                 model.viewerItem = ViewerItem(url: item)
+                if fromHistory { web?.reload() }
             case .redirectToInbox:
-                web?.load(URLRequest(url: RoutePolicy.inboxURL))
+                web?.load(URLRequest(url: self.model.policy.inboxURL))
             case .external(let target):
                 UIApplication.shared.open(target)
             }
@@ -117,9 +121,9 @@ struct WebContainer: UIViewRepresentable {
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.frameInfo.isMainFrame,
-                  message.frameInfo.securityOrigin.host == "www.instagram.com",
-                  let url = BridgeMessage.parseRoute(message.body) else { return }
-            handle(url)
+                  model.policy.isOwnHost(message.frameInfo.securityOrigin.host),
+                  let route = BridgeMessage.parseRoute(message.body) else { return }
+            handle(route.url, fromHistory: route.fromHistory)
         }
     }
 }

@@ -11,15 +11,26 @@ public enum RouteDecision: Equatable {
 }
 
 public struct RoutePolicy {
-    public static let inboxURL = URL(string: "https://www.instagram.com/direct/inbox/")!
-    static let hosts: Set<String> = ["instagram.com", "www.instagram.com"]
+    public static let instagram = URL(string: "https://www.instagram.com")!
 
+    /// Where Instagram is served from. Only tests point this anywhere else (a local fixture server).
+    public let origin: URL
+    public let inboxURL: URL
+    private let hosts: Set<String>
     private let allow: [NSRegularExpression]
     private let quarantine: [NSRegularExpression]
 
-    public init(pack: RulePack) throws {
+    public init(pack: RulePack, origin: URL = RoutePolicy.instagram) throws {
+        self.origin = origin
+        inboxURL = origin.appendingPathComponent("direct/inbox/")
+        let host = origin.host?.lowercased() ?? ""
+        hosts = host == "www.instagram.com" ? ["instagram.com", "www.instagram.com"] : [host]
         allow = try pack.allow.map { try NSRegularExpression(pattern: $0) }
         quarantine = try pack.quarantine.map { try NSRegularExpression(pattern: $0) }
+    }
+
+    public func isOwnHost(_ host: String?) -> Bool {
+        hosts.contains(host?.lowercased() ?? "")
     }
 
     public func decide(_ url: URL) -> RouteDecision {
@@ -33,24 +44,46 @@ public struct RoutePolicy {
             let target = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first { $0.name == "u" }?.value
                 .flatMap(URL.init(string:))
-            if let target, target.scheme?.lowercased() == "https", !Self.hosts.contains(target.host?.lowercased() ?? "") {
+            if let target, target.scheme?.lowercased() == "https", !isOwnHost(target.host) {
                 return .external(target)
             }
             return .block
         }
-        guard Self.hosts.contains(host) else { return .external(url) }
+        guard isOwnHost(host) else { return .external(url) }
 
         let path = url.path.isEmpty ? "/" : url.path
         if matches(allow, path) { return .allow }
-        if matches(quarantine, path) { return .quarantine(url) }
+        if matches(quarantine, path) { return .quarantine(canonicalItem(url)) }
         return .redirectToInbox
     }
 
+    /// `/reels/{id}` is the swipeable reels feed; `/reel/{id}` is the single-item page.
+    /// Also drops tracking query parameters such as `igsh`.
+    public func canonicalItem(_ url: URL) -> URL {
+        guard let (kind, id) = Self.shortcode(url.path) else {
+            var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            parts?.query = nil
+            return parts?.url ?? url
+        }
+        let single = kind == "reels" ? "reel" : kind
+        return origin.appendingPathComponent("\(single)/\(id)/")
+    }
+
     /// The viewer may only show its own item; every other navigation is dropped.
-    public static func allowsInViewer(_ url: URL, item: URL) -> Bool {
+    /// `/p/`, `/reel/`, `/reels/` and `/tv/` with the same shortcode are the same item.
+    public func allowsInViewer(_ url: URL, item: URL) -> Bool {
         if url.scheme?.lowercased() == "about" { return true }
-        guard hosts.contains(url.host?.lowercased() ?? "") else { return false }
-        return normalized(url.path) == normalized(item.path)
+        guard isOwnHost(url.host) else { return false }
+        if let a = Self.shortcode(url.path), let b = Self.shortcode(item.path) { return a.id == b.id }
+        return Self.normalized(url.path) == Self.normalized(item.path)
+    }
+
+    private static let shortcodeRegex = try! NSRegularExpression(pattern: "^/(p|reel|reels|tv)/([A-Za-z0-9_-]+)/?$")
+
+    private static func shortcode(_ path: String) -> (kind: String, id: String)? {
+        guard let m = shortcodeRegex.firstMatch(in: path, range: NSRange(path.startIndex..., in: path)),
+              let kind = Range(m.range(at: 1), in: path), let id = Range(m.range(at: 2), in: path) else { return nil }
+        return (String(path[kind]), String(path[id]))
     }
 
     private static func normalized(_ path: String) -> String {

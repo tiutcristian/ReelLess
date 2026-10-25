@@ -10,7 +10,7 @@ struct ViewerSheet: View {
 
     var body: some View {
         NavigationStack {
-            ViewerWebView(url: url, pack: model.pack)
+            ViewerWebView(url: url, pack: model.pack, policy: model.policy)
                 .ignoresSafeArea(edges: .bottom)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -24,8 +24,9 @@ struct ViewerSheet: View {
 struct ViewerWebView: UIViewRepresentable {
     let url: URL
     let pack: RulePack
+    let policy: RoutePolicy
 
-    func makeCoordinator() -> Coordinator { Coordinator(item: url) }
+    func makeCoordinator() -> Coordinator { Coordinator(item: url, policy: policy) }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = Browser.configuration()
@@ -37,7 +38,7 @@ struct ViewerWebView: UIViewRepresentable {
         web.scrollView.isScrollEnabled = false
         web.scrollView.bounces = false
         #if DEBUG
-        web.isInspectable = true
+        if #available(iOS 16.4, *) { web.isInspectable = true }
         #endif
         web.load(URLRequest(url: url))
         return web
@@ -47,7 +48,8 @@ struct ViewerWebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         let item: URL
-        init(item: URL) { self.item = item }
+        let policy: RoutePolicy
+        init(item: URL, policy: RoutePolicy) { self.item = item; self.policy = policy }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -55,7 +57,7 @@ struct ViewerWebView: UIViewRepresentable {
                 decisionHandler(.allow)
                 return
             }
-            decisionHandler(RoutePolicy.allowsInViewer(target, item: item) ? .allow : .cancel)
+            decisionHandler(policy.allowsInViewer(target, item: item) ? .allow : .cancel)
         }
     }
 }

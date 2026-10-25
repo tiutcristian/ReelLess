@@ -3,6 +3,9 @@ options:
   bundleIdPrefix: ro.tiut
   deploymentTarget:
     iOS: "16.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: R9K35CNHLG
 packages:
   ReelLessCore:
     path: Packages/ReelLessCore
@@ -22,8 +25,27 @@ targets:
         NSCameraUsageDescription: Send photos and videos in chats.
         NSMicrophoneUsageDescription: Record voice notes and videos for chats.
         NSPhotoLibraryUsageDescription: Attach photos and videos to messages.
+        # Lets UI tests load the local fixture server; has no effect on instagram.com (HTTPS).
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ro.tiut.reelless
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
+    scheme:
+      testTargets: [ReelLessUITests]
+  ReelLessUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+        excludes: [Fixtures]
+    dependencies:
+      - target: ReelLess
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ro.tiut.reelless.uitests
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: ReelLess

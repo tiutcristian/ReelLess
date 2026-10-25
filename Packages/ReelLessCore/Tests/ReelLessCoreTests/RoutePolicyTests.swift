@@ -24,12 +24,17 @@ final class RoutePolicyTests: XCTestCase {
     }
 
     func testSharedItemsAreQuarantined() throws {
-        for s in ["https://www.instagram.com/reel/Cabc_123/", "https://www.instagram.com/p/Cabc-123",
-                  "https://www.instagram.com/tv/Cabc123/", "https://www.instagram.com/reels/Cabc123/",
+        for s in ["https://www.instagram.com/reel/Cabc_123/", "https://www.instagram.com/p/Cabc-123/",
+                  "https://www.instagram.com/tv/Cabc123/",
                   "https://www.instagram.com/stories/user/3141592653589793/"] {
             let url = URL(string: s)!
             XCTAssertEqual(try policy().decide(url), .quarantine(url), s)
         }
+    }
+
+    func testReelsFeedLinkOpensSingleReel() throws {
+        XCTAssertEqual(try decide("https://www.instagram.com/reels/Cabc123/?igsh=xyz"),
+                       .quarantine(URL(string: "https://www.instagram.com/reel/Cabc123/")!))
     }
 
     func testExternalLinks() throws {
@@ -40,15 +45,18 @@ final class RoutePolicyTests: XCTestCase {
         XCTAssertEqual(try decide("instagram://reels"), .block)
     }
 
-    func testViewerOnlyAllowsOwnItem() {
+    func testViewerOnlyAllowsOwnItem() throws {
         let item = URL(string: "https://www.instagram.com/reel/Cabc/")!
-        XCTAssertTrue(RoutePolicy.allowsInViewer(URL(string: "https://www.instagram.com/reel/Cabc")!, item: item))
-        XCTAssertFalse(RoutePolicy.allowsInViewer(URL(string: "https://www.instagram.com/reel/Cxyz/")!, item: item))
-        XCTAssertFalse(RoutePolicy.allowsInViewer(URL(string: "https://www.instagram.com/reels/")!, item: item))
+        XCTAssertTrue(try policy().allowsInViewer(URL(string: "https://www.instagram.com/reel/Cabc")!, item: item))
+        XCTAssertFalse(try policy().allowsInViewer(URL(string: "https://www.instagram.com/reel/Cxyz/")!, item: item))
+        XCTAssertFalse(try policy().allowsInViewer(URL(string: "https://www.instagram.com/reels/")!, item: item))
+        XCTAssertTrue(try policy().allowsInViewer(URL(string: "https://www.instagram.com/reels/Cabc/")!, item: item))
+        XCTAssertFalse(try policy().allowsInViewer(URL(string: "https://www.instagram.com/reels/Cxyz/")!, item: item))
     }
 
     func testBridgeParsing() {
-        XCTAssertNotNil(BridgeMessage.parseRoute(["type": "route", "url": "https://www.instagram.com/explore/"]))
+        XCTAssertEqual(BridgeMessage.parseRoute(["type": "route", "url": "https://www.instagram.com/explore/"])?.fromHistory, false)
+        XCTAssertEqual(BridgeMessage.parseRoute(["type": "route", "url": "https://www.instagram.com/reels/x/", "history": true])?.fromHistory, true)
         XCTAssertNil(BridgeMessage.parseRoute(["type": "eval", "url": "https://x.com"]))
         XCTAssertNil(BridgeMessage.parseRoute("route"))
     }

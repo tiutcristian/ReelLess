@@ -22,7 +22,17 @@ final class AppModel: ObservableObject {
     init() {
         // The bundled pack ships with the app; failing to load it is a build error, not a runtime state.
         pack = try! RulePack.bundled()
-        policy = try! RoutePolicy(pack: pack)
+        policy = try! RoutePolicy(pack: pack, origin: Self.origin)
+    }
+
+    /// UI tests launch with `-ReelLessOrigin http://localhost:8765` to load local Instagram-like fixtures.
+    private static var origin: URL {
+        #if DEBUG
+        if let raw = UserDefaults.standard.string(forKey: "ReelLessOrigin"), let url = URL(string: raw) {
+            return url
+        }
+        #endif
+        return RoutePolicy.instagram
     }
 
     /// URLs only, never message text.
